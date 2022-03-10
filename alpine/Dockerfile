@@ -1,0 +1,347 @@
+FROM postgres:14.2-alpine AS plv8_build
+
+ARG V8_VERSION=8.6.405
+ARG PLV8_VERSION=3.0.0
+
+ARG V8_SHELL=NO
+ARG V8_MONOLITHIC=YES
+ARG V8_STATIC_LIB=NO
+ARG V8_SHARED_LIB=YES
+
+ARG V8_DEBUG=NO
+ARG V8_DEBUG_OPT=NO
+ARG V8_SYMBOL_LEVEL=0
+
+ARG V8_INTL=NO
+ARG V8_SIPHASH=NO
+ARG V8_OBJECT_PRINT=NO
+ARG V8_DISASSEMBLER=NO
+ARG V8_POINTER_COMPRESSION=YES
+ARG V8_EXTERNAL_STARTUP_DATA=NO
+ARG V8_31BIT_SMIS_ON_64BIT_ARCH=YES
+ARG V8_TYPED_ARRAY_MAX_SIZE_IN_HEAP=64
+
+ARG NUM_JOBS
+ARG SYMBOL_LEVEL=0
+
+ARG USE_CLANG=YES
+ARG USE_LLD=YES
+ARG USE_LLD_THIN_LTO=NO
+ARG USE_LLD_THIN_LTO_OPT=NO
+ARG LLD_THIN_LTO_JOBS
+# GNU libc backtrace facility
+ARG USE_EXECINFO=NO
+
+ARG USE_GN_SOURCE=NO
+ARG GN_SOURCE_REV
+ARG GN_EXTRA_ARGS
+
+ARG OUT_LIBCXX=NO
+ARG OUT_HEADERS=YES
+ARG OUT_STRIP=YES
+
+ENV V8_VERSION=${V8_VERSION} \
+    V8_PATH=/usr/local/v8
+
+RUN set -eux; \
+  as_ver() { set -- ${1//./ }; local y="00${2:-0}" z="00${3:-0}" w="00${4:-0}"; echo "${1}${y:(-3)}${z:(-3)}${w:(-3)}"; }; \
+  compare_ver() { test $(as_ver ${1}) -${2} $(as_ver ${3}); }; \
+  contains() { if [ -z "${1##*${2}*}" ]; then shift 2; echo ${*:-}; fi; }; \
+  get_deps() { find ${*:-} -type f -and \( -executable -or -name '*.so*' \) -exec ldd '{}' ';' | sed -rn "s/\s*(.* => )?(.*) \(.*/\2/p" | sort -u; }; \
+  if_no() { if [ ${1} = 'NO' ]; then shift 1; echo ${*:-}; fi; }; \
+  if_v8_ver() { if compare_ver ${V8_VERSION} ${1} ${2}; then shift 2; echo ${*:-}; fi; }; \
+  if_yes() { if [ ${1} = 'YES' ]; then shift 1; echo ${*:-}; fi; }; \
+  load_archive() { [ -d ${2} ] || mkdir -p ${2}; wget ${1} -T 30 -O - | tar xmz -C ${2}; }; \
+  to_bool() { if [ ${1} = 'YES' ]; then echo true; else echo false; fi; }; \
+  \
+  if [ "${V8_VERSION//[^.]}" = '.' ]; then \
+    v8_version_url="https://raw.githubusercontent.com/v8/v8/${V8_VERSION}-lkgr/include/v8-version.h"; \
+    v8_build_ver=$(wget "${v8_version_url}" -T 30 -O - | sed -rn "/#.*V8_BUILD_NUMBER/N;s/#.*_NUMBER (\d+).*_LEVEL (\d+)/\1.\2/p"); \
+    V8_VERSION=${v8_build_ver:+${V8_VERSION}.${v8_build_ver//.0}}; \
+    V8_VERSION=${V8_VERSION:-latest}; \
+  fi; \
+  if test $(contains "dev beta stable latest" ${V8_VERSION} 1); then \
+    if [ ${V8_VERSION} = 'latest' ]; then \
+      v8_version_url="https://storage.googleapis.com/chromium-v8/official/canary/v8-linux64-rel-latest.json"; \
+      v8_version_regexp=".*\"version\":\s*?\"(.*\d+)\".*"; \
+    else \
+      v8_version_url="https://omahaproxy.appspot.com/all"; \
+      v8_version_regexp="linux,${V8_VERSION}.*,(.*)$"; \
+    fi; \
+    \
+    V8_VERSION=$(wget ${v8_version_url} -T 30 -O - | sed -rn "s/${v8_version_regexp}/\1/p"); \
+  fi; \
+  \
+  case $(uname -m) in \
+    x86_64)      ARCH="x64"   ;; \
+    x86)         ARCH="x86"   ;; \
+    armhf|armv7) ARCH="arm"   ;; \
+    aarch64)     ARCH="arm64" ;; \
+  esac; \
+  \
+  NUM_JOBS=${NUM_JOBS:-$(getconf _NPROCESSORS_ONLN)}; \
+  SOURCE_REPO="https://chromium.googlesource.com"; \
+  V8_SOURCE=/tmp/build/plv8-$PLV8_VERSION/build/v8; \
+  V8_DEPS=${V8_SOURCE}/DEPS; \
+  PY_VER=$(if_v8_ver ge 7.9 3); PY_VER=${PY_VER:-2}; \
+  \
+  echo "https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories; \
+  apk add --no-cache --virtual .v8-build \
+    g++ \
+	curl \
+	make \
+	perl \
+    linux-headers \
+    python${PY_VER} \
+    samurai \
+    $(if_yes ${USE_CLANG} \
+      clang=~12 \
+      llvm12=~12 \
+    ) \
+    $(if_no  ${USE_CLANG}     gcc) \
+    $(if_yes ${USE_LLD}       lld=~12) \
+    $(if_yes ${USE_GN_SOURCE} clang=~12) \
+    $(if_no  ${USE_GN_SOURCE} gn) \
+    $(if_yes ${USE_EXECINFO}  libexecinfo-dev) \
+    $(if_yes ${V8_INTL}       icu-dev=~69) \
+    ; \
+  : "-- V8: download source"; \
+  load_archive "${SOURCE_REPO}/v8/v8/+archive/${V8_VERSION}.tar.gz" ${V8_SOURCE}; \
+  : "-- V8: download deps."; \
+  deps=" \
+    base/trace_event/common \
+    build \
+    buildtools \
+    $(if_yes ${V8_INTL} third_party/icu) \
+    $(if_yes ${V8_SHELL} \
+      third_party/jinja2 \
+      third_party/markupsafe \
+    ) \
+    $(if_v8_ver le 6.7.148 testing/gtest) \
+    $(if_v8_ver ge 6.7.149 third_party/googletest/src) \
+    $(if_v8_ver ge 8.0.365 third_party/zlib) \
+    $(if_v8_ver le 9.6.130 $(if_v8_ver ge 9.6.53 \
+      third_party/abseil-cpp \
+    )) \
+  "; \
+  for dep in ${deps}; do { \
+    target="${dep//\//\\/}"; \
+    target="${target//+/\\+}"; \
+    repo=$(sed -rn "/['\"].*${target}['\"]:/{;:a;N/\.git/!ba;s/.*['\"](.*)\.git['\"].*/\1/p}" ${V8_DEPS}); \
+    rev=$(sed -rn "/['\"].*${target}['\"]:/{;:a;N/@/!ba;s/.*['\"](.*)['\"].*/\1/p}" ${V8_DEPS}); \
+    \
+    load_archive "${SOURCE_REPO}${repo}/+archive/${rev}.tar.gz" ${V8_SOURCE}/${dep}; \
+  } & \
+  done; \
+  wait; \
+  \
+  if [ ${USE_GN_SOURCE} = 'YES' ]; then \
+    GN_SOURCE=/tmp/build/plv8-$PLV8_VERSION/build/gn; \
+    gn_rev=${GN_SOURCE_REV:-$(cat ${V8_SOURCE}/buildtools/linux64/gn.sha1 || true)}; \
+    gn_rev=${gn_rev:-$(sed -rn "/['\"]gn_version['\"]:\s*/{N;s/.*['\"]git_revision:(.*)['\"],?\s*?/\1/p}" ${V8_DEPS})}; \
+    gn_rev=${gn_rev:?GN_SOURCE_REV is required}; \
+    : "-- GN SOURCE: download source"; \
+    load_archive "https://gn.googlesource.com/gn/+archive/${gn_rev}.tar.gz" ${GN_SOURCE}; \
+    : "-- GN SOURCE: stop regen config and speed up build"; \
+    sed -ri \
+      -e "s/(generator\s*=).*',/\1 0'/" \
+      -e "/executables\['gn_unittests'\]/d" \
+      -e "s/[^def] WriteGenericNinja/  del executables['gn_unittests']\n\n&/" \
+      ${GN_SOURCE}/build/gen.py; \
+    : "-- GN SOURCE: build"; \
+    python${PY_VER} ${GN_SOURCE}/build/gen.py \
+      --host=linux \
+      --platform=linux \
+      --no-last-commit-position \
+      $(if_v8_ver ge 7.9.35 --no-static-libstdc++); \
+    echo -e "\
+    \n#ifndef OUT_LAST_COMMIT_POSITION_H_ \
+    \n#define OUT_LAST_COMMIT_POSITION_H_ \
+    \n#define LAST_COMMIT_POSITION_NUM 0 \
+    \n#define LAST_COMMIT_POSITION \"${gn_rev::8}\" \
+    \n#endif \
+    " > ${GN_SOURCE}/out/last_commit_position.h; \
+    ninja \
+      -C ${GN_SOURCE}/out \
+      -j ${NUM_JOBS}; \
+    ln -fs ${GN_SOURCE}/out/gn /usr/bin/gn; \
+  fi; \
+  \
+  cd ${V8_SOURCE}; \
+  : "-- Patch: build"; \
+  sed -ri \
+    -e "$(if_no ${V8_SHELL} "s/\"(src|test)\/inspector:.*\",?//")" \
+    -e "s/\"(tools|test):gn_all\",?//" \
+    -e "s/\"test\/(cctest|unittests):.*\",?//" \
+    -e "s/\"\/\/build\/(win:default_exe_manifest|config:exe_and_shlib_deps)\",?//" \
+    BUILD.gn; \
+  if compare_ver ${V8_VERSION} le 6.7.197; then \
+    sed -ri "s/\"\/\/test\/test262\/BUILD.gn\",?//" .gn; \
+  fi; \
+  if [ ${V8_INTL} = 'NO' ] && compare_ver ${V8_VERSION} le 6.7.196; then \
+    sed -i "s/import(\"\/\/third_party\/icu\/config.gni\")/icu_use_data_file = false/" gni/isolate.gni; \
+  fi; \
+  if compare_ver ${V8_VERSION} le 7.1.165 && compare_ver ${V8_VERSION} ge 7.1.79; then \
+    sed -i "/import(\"\/\/third_party\/catapult\/devil\/devil_arm\.gni\")/d" build/config/arm.gni; \
+  fi; \
+  if compare_ver ${V8_VERSION} le 7.2.505 && compare_ver ${V8_VERSION} ge 7.1.78; then \
+    sed -i "s/if (use_atk)/if (false)/" build/config/linux/BUILD.gn; \
+  fi; \
+  if compare_ver ${V8_VERSION} ge 8.6.51; then \
+    echo "checkout_google_benchmark = false" >> build/config/gclient_args.gni; \
+  fi; \
+  if compare_ver ${V8_VERSION} le 8.7.209; then \
+    sed -ri "s/(set_sources_assignment_filter)\(.*\)/\1([])/" build/config/BUILDCONFIG.gn; \
+  fi; \
+  if [ ${ARCH} = 'arm' ]; then \
+    sed -ri "s/\"(--target)=arm-.*\"/\"\1=$(g++ -dumpmachine)\"/" build/config/compiler/BUILD.gn; \
+  fi; \
+  if [ ${ARCH} = 'arm64' ]; then \
+    dumpmachine=$(g++ -dumpmachine); \
+    sed -ri "s/\"(--target)=aarch64-.*\"/\"\1=${dumpmachine}\"/" build/config/compiler/BUILD.gn; \
+    sed -ri "s/(toolprefix) = \"aarch64-.*\"/\1 = \"\/usr\/${dumpmachine}\/bin\/\"/" build/toolchain/linux/BUILD.gn; \
+    if ${USE_CLANG} = 'NO' && compare_ver ${V8_VERSION} le 9.3.50; then \
+      : "-- GCC build fails trying to use a non constexpr function from a constexpr function"; \
+      header=$(if_v8_ver le 7.3.200 assembler-arm64.h); \
+      sed -ri "s/VRegister from_code/constexpr &/" src/$(if_v8_ver ge 7.6.234 codegen/)arm64/${header:-register-arm64.h}; \
+    fi; \
+  fi; \
+  \
+  : "-- Patch: compiler"; \
+  if [ ${USE_CLANG} = 'NO' ]; then \
+    if test $(contains ${ARCH} 'arm' 1) && compare_ver ${V8_VERSION} ge 8.0.365; then \
+      sed -ri "s/if \(arm_use_neon/& \&\& is_clang/" third_party/zlib/BUILD.gn; \
+    fi; \
+    if compare_ver ${V8_VERSION} le 8.9.2; then \
+      : "-- Patch: V8 is not -fsanitize=null clean (issue 3782)"; \
+      sed -ri "s/(cflags)\s*=\s*\[(.*)\]/\1 = [\"-fno-delete-null-pointer-checks\", \2]/" BUILD.gn; \
+    fi; \
+    : "-- Patch: don't use the attribute [[nodiscard]]"; \
+    sed -ri "s/(define V8_HAS_CPP_ATTRIBUTE_NODISCARD).*/\1 0/g" include/v8config.h; \
+  fi; \
+  if [ ${USE_CLANG} = 'YES' ]; then \
+    sed -ri \
+      -e "$(if_v8_ver le 6.6.164 "/(update_args|(\":|\\$|\s+)clang_revision)/{/.*/d}")" \
+      -e "$(if_v8_ver ge 9.3.72  "s/\"-Wno-unused-but-set-(variable|parameter)\",?//")" \
+      -e "$(if_v8_ver ge 9.4.22  "s/\"(-Wa,)?-f(debug|file)-compilation-dir(.|=).*\",?//")" \
+      build/config/compiler/BUILD.gn; \
+  fi; \
+  if [ "${USE_LLD}${USE_LLD_THIN_LTO}" = 'YESYES' ]; then \
+    sed -ri \
+      -e "/cache_policy =.*\"/d" \
+      -e "/\/lldltocache(policy)?:/{;:a;N/,/!ba;s/.*,//}" \
+      -e "s/(thinlto-jobs=).*(\",?)/\1${USE_LLD_THIN_LTO_JOBS:-${NUM_JOBS}}\2/" \
+      build/config/compiler/BUILD.gn; \
+  fi; \
+  \
+  : "-- Patch: V8"; \
+  if test $(contains ${ARCH} 'arm' 1); then \
+    sed -i "s/\(V8_HOST_ARCH\)_PPC || V8_HOST_ARCH_PPC64/& || \1_ARM || \1_ARM64/" src/base/cpu.cc; \
+  fi; \
+  if compare_ver ${V8_VERSION} le 7.4.221; then \
+    : "-- Patch: fix deadlock in OptimizingCompileDispatcher (issue 935358)"; \
+    sed -ri "/.*access_output_queue_.*;\s*/{N;s/(.*output_queue_\.push.*)/{\n\1\n}/}" \
+      src/compiler-dispatcher/optimizing-compile-dispatcher.cc; \
+  fi; \
+  : "-- Patch: use monotonic clock for 'pthread_cond_timedwait' with musl"; \
+  sed -ri "s/\((V8_OS_LINUX).*[^=\)]\)?/\1/g" src/base/platform/condition-variable.cc; \
+  : "-- Patch: fix undefined symbol: backtrace_symbols (execinfo.h)"; \
+  if [ ${USE_EXECINFO} = 'YES' ]; then \
+    sed -ri "/config\(\"libbase_config\"\)/{;:a;N;/libs/!ba;s/(libs) = \[(.*)\]/\1 = \[\"execinfo\", \2\]/}" BUILD.gn; \
+    sed -ri \
+      -e "s/^(#if) V8_LIBC_GLIBC.*/\1 V8_OS_LINUX/" \
+      -e "s/(count_) = .*backtrace\(.*;/\1 = 0;/" \
+      src/base/debug/stack_trace_posix.cc; \
+  else \
+    sed -ri \
+      -e "s/^(#if) V8_LIBC_GLIBC.*/\1 0/" \
+      -e "/const char k(MangledSymbolPrefix|SymbolCharacters)/{N;/;/d}" \
+      src/base/debug/stack_trace_posix.cc; \
+    sed -ri \
+      -e "/^#include <execinfo.h>s*/d" \
+      -e "s/^#ifdef SYMBOLIZE_FUNCTION.*/#if 0/" \
+      src/$(if_v8_ver ge 7.6.234 codegen/)external-reference-table.cc; \
+  fi; \
+  : "-- GN: generate instructions"; \
+  gn gen out \
+    --script-executable=python${PY_VER} \
+    --args=" \
+      target_cpu=\"${ARCH}\" \
+      target_os=\"linux\" \
+      symbol_level=${SYMBOL_LEVEL:-1} \
+      \
+      is_cfi=false \
+      is_clang=$(to_bool ${USE_CLANG}) \
+      $(if_yes ${USE_CLANG} \
+        clang_base_path=\"/usr\" \
+        clang_use_chrome_plugins=false \
+      ) \
+      use_sysroot=false \
+      use_custom_libcxx=false \
+      use_custom_libcxx_for_host=false \
+      use_glib=false \
+      use_gold=false \
+      use_lld=$(to_bool ${USE_LLD}) \
+      $(if_yes ${USE_LLD} \
+        use_thin_lto=$(to_bool ${USE_LLD_THIN_LTO}) \
+        thin_lto_enable_optimizations=$(to_bool ${USE_LLD_THIN_LTO_OPT}) \
+      ) \
+      fatal_linker_warnings=false \
+      treat_warnings_as_errors=false \
+      \
+      v8_target_cpu=\"${ARCH}\" \
+      is_debug=$(to_bool ${V8_DEBUG}) \
+      $(if_yes ${V8_DEBUG} v8_optimized_debug=$(to_bool ${V8_DEBUG_OPT})) \
+      $(if_no  ${V8_DEBUG} v8_enable_disassembler=$(to_bool ${V8_DISASSEMBLER})) \
+      v8_symbol_level=${V8_SYMBOL_LEVEL:-1} \
+      \
+      v8_static_library=$(to_bool ${V8_STATIC_LIB}) \
+      $(if_yes ${V8_MONOLITHIC} \
+        is_component_build=false \
+        v8_monolithic=true \
+        v8_use_external_startup_data=false \
+      ) \
+      $(if_no ${V8_MONOLITHIC} \
+        is_component_build=$(to_bool ${V8_SHARED_LIB}) \
+        v8_use_external_startup_data=$(to_bool ${V8_EXTERNAL_STARTUP_DATA}) \
+      ) \
+      \
+      v8_use_siphash=$(to_bool ${V8_SIPHASH}) \
+      v8_win64_unwinding_info=false \
+      v8_enable_backtrace=true \
+      v8_enable_gdbjit=false \
+      v8_enable_vtunejit=false \
+      v8_enable_vtunetracemark=false \
+      v8_enable_handle_zapping=false \
+      v8_enable_google_benchmark=false \
+      v8_enable_i18n_support=$(to_bool ${V8_INTL}) \
+      v8_enable_object_print=$(to_bool ${V8_OBJECT_PRINT}) \
+      v8_typed_array_max_size_in_heap=${V8_TYPED_ARRAY_MAX_SIZE_IN_HEAP:-64} \
+      $(contains ${ARCH} '64' \
+        v8_enable_pointer_compression=$(to_bool ${V8_POINTER_COMPRESSION}) \
+        v8_enable_31bit_smis_on_64bit_arch=$(to_bool ${V8_31BIT_SMIS_ON_64BIT_ARCH}) \
+      ) \
+      ${GN_EXTRA_ARGS:-} \
+    "; \
+  : "-- Ninja: build V8";
+
+RUN curl -o /tmp/build/v$PLV8_VERSION.tar.gz -SL "https://github.com/plv8/plv8/archive/refs/tags/v${PLV8_VERSION}.tar.gz" \
+  && cd /tmp/build \
+  && tar -xzf /tmp/build/v$PLV8_VERSION.tar.gz -C /tmp/build/
+
+COPY Makefile.alpine /tmp/build/plv8-$PLV8_VERSION/
+
+RUN cd /tmp/build/plv8-$PLV8_VERSION \
+  && make -f Makefile.alpine static \
+  && make -f Makefile.alpine install \
+  && strip /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
+  
+RUN apk del --no-network .v8-build; \
+  rm -rf /tmp/* /var/tmp/*
+
+
+FROM postgres:14.2-alpine
+ENV PLV8_VERSION=3.0.0
+RUN apk add --update libstdc++
+COPY --from=plv8_build /usr/local/share/postgresql/extension/ /usr/local/share/postgresql/extension/
+COPY --from=plv8_build /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
