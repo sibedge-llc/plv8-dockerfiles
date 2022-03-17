@@ -1,0 +1,3 @@
+# Generated from 'DEPS'
+checkout_google_benchmark = false
+mac_xcode_version = "default"
