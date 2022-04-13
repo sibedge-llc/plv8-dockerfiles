@@ -1,7 +1,7 @@
-FROM postgres:14.2 AS plv8_build
+FROM postgres:13.6 AS plv8_build
 
 ARG PLV8_VERSION=3.0.0
-ARG PG_MAJOR=14
+ARG PG_MAJOR=13
 ARG V8_VERSION=8.6.405
 
 RUN buildDependencies="build-essential \
@@ -80,9 +80,9 @@ RUN rm -rf /root/.vpython_cipd_cache /root/.vpython-root \
   && rm -rf /tmp/build /var/lib/apt/lists/*
 
 
-FROM postgres:14.2
+FROM postgres:13.6
 
-ARG PG_MAJOR=14
+ARG PG_MAJOR=13
 ARG PLV8_VERSION=3.0.0
 
 RUN mkdir -p /usr/lib/postgresql/${PG_MAJOR}/lib/
