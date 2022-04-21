@@ -1,7 +1,7 @@
 FROM postgres:14.2-alpine AS plv8_build
 
-ARG V8_VERSION=8.6.405
-ARG PLV8_VERSION=3.0.0
+ARG V8_VERSION=9.7.107
+ARG PLV8_VERSION=3.1.1
 
 ARG V8_SHELL=NO
 ARG V8_MONOLITHIC=YES
@@ -341,7 +341,6 @@ RUN apk del --no-network .v8-build; \
 
 
 FROM postgres:14.2-alpine
-ENV PLV8_VERSION=3.0.0
-RUN apk add --update libstdc++
+ENV PLV8_VERSION=3.1.1
 COPY --from=plv8_build /usr/local/share/postgresql/extension/ /usr/local/share/postgresql/extension/
 COPY --from=plv8_build /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
