@@ -1,7 +1,7 @@
 FROM postgres:13.6-alpine AS plv8_build
 
-ARG V8_VERSION=8.6.405
-ARG PLV8_VERSION=3.0.0
+ARG V8_VERSION=9.7.107
+ARG PLV8_VERSION=3.1.1
 
 ARG V8_SHELL=NO
 ARG V8_MONOLITHIC=YES
@@ -39,6 +39,10 @@ ARG GN_EXTRA_ARGS
 ARG OUT_LIBCXX=NO
 ARG OUT_HEADERS=YES
 ARG OUT_STRIP=YES
+
+ARG BIGINT_GRACEFUL_VALUE='BIGINT_GRACEFUL=1'
+ARG BIGINT_GRACEFUL
+ARG BIGINT_GRACEFUL_FLAG=${BIGINT_GRACEFUL:+$BIGINT_GRACEFUL_VALUE}
 
 ENV V8_VERSION=${V8_VERSION} \
     V8_PATH=/usr/local/v8
@@ -332,7 +336,7 @@ RUN curl -o /tmp/build/v$PLV8_VERSION.tar.gz -SL "https://github.com/plv8/plv8/a
 COPY Makefile.alpine /tmp/build/plv8-$PLV8_VERSION/
 
 RUN cd /tmp/build/plv8-$PLV8_VERSION \
-  && make -f Makefile.alpine static \
+  && make -f Makefile.alpine ${BIGINT_GRACEFUL_FLAG} static \
   && make -f Makefile.alpine install \
   && strip /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
   
@@ -341,7 +345,6 @@ RUN apk del --no-network .v8-build; \
 
 
 FROM postgres:13.6-alpine
-ENV PLV8_VERSION=3.0.0
-RUN apk add --update libstdc++
+ENV PLV8_VERSION=3.1.1
 COPY --from=plv8_build /usr/local/share/postgresql/extension/ /usr/local/share/postgresql/extension/
 COPY --from=plv8_build /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
