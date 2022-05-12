@@ -40,6 +40,10 @@ ARG OUT_LIBCXX=NO
 ARG OUT_HEADERS=YES
 ARG OUT_STRIP=YES
 
+ARG BIGINT_GRACEFUL_VALUE='BIGINT_GRACEFUL=1'
+ARG BIGINT_GRACEFUL
+ARG BIGINT_GRACEFUL_FLAG=${BIGINT_GRACEFUL:+$BIGINT_GRACEFUL_VALUE}
+
 ENV V8_VERSION=${V8_VERSION} \
     V8_PATH=/usr/local/v8
 
@@ -332,7 +336,7 @@ RUN curl -o /tmp/build/v$PLV8_VERSION.tar.gz -SL "https://github.com/plv8/plv8/a
 COPY Makefile.alpine /tmp/build/plv8-$PLV8_VERSION/
 
 RUN cd /tmp/build/plv8-$PLV8_VERSION \
-  && make -f Makefile.alpine static \
+  && make -f Makefile.alpine ${BIGINT_GRACEFUL_FLAG} static \
   && make -f Makefile.alpine install \
   && strip /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
   
