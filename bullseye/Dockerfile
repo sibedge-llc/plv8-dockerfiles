@@ -2,6 +2,11 @@ FROM postgres:14.4 AS plv8_build
 
 ENV PLV8_VERSION=3.0.0
 ENV PG_MAJOR=14
+
+ARG BIGINT_GRACEFUL_VALUE='BIGINT_GRACEFUL=1'
+ARG BIGINT_GRACEFUL
+ARG BIGINT_GRACEFUL_FLAG=${BIGINT_GRACEFUL:+$BIGINT_GRACEFUL_VALUE}
+
 RUN buildDependencies="build-essential \
     ca-certificates \
     curl \
@@ -25,7 +30,7 @@ RUN mkdir -p /tmp/build \
   && cd /tmp/build \
   && tar -xzf /tmp/build/v$PLV8_VERSION.tar.gz -C /tmp/build/ \
   && cd /tmp/build/plv8-$PLV8_VERSION \
-  && make static \
+  && make ${BIGINT_GRACEFUL_FLAG} static \
   && make install \
   && strip /usr/lib/postgresql/${PG_MAJOR}/lib/plv8-${PLV8_VERSION}.so
 RUN rm -rf /root/.vpython_cipd_cache /root/.vpython-root \
