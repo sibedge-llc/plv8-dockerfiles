@@ -1,7 +1,7 @@
-FROM postgres:14-alpine3.15 AS plv8_build
+FROM postgres:14.4-alpine AS plv8_build
 
-ARG V8_VERSION=9.7.107
-ARG PLV8_VERSION=3.1.1
+ARG V8_VERSION=9.9.115.10
+ARG PLV8_VERSION=3.1.3
 
 ARG V8_SHELL=NO
 ARG V8_MONOLITHIC=YES
@@ -99,12 +99,12 @@ RUN set -eux; \
     python${PY_VER} \
     samurai \
     $(if_yes ${USE_CLANG} \
-      clang=~12 \
-      llvm12=~12 \
+      clang=~13 \
+      llvm13=~13 \
     ) \
     $(if_no  ${USE_CLANG}     gcc) \
-    $(if_yes ${USE_LLD}       lld=~12) \
-    $(if_yes ${USE_GN_SOURCE} clang=~12) \
+    $(if_yes ${USE_LLD}       lld=~13) \
+    $(if_yes ${USE_GN_SOURCE} clang=~13) \
     $(if_no  ${USE_GN_SOURCE} gn) \
     $(if_yes ${USE_EXECINFO}  libexecinfo-dev) \
     $(if_yes ${V8_INTL}       icu-dev=~69) \
@@ -345,6 +345,6 @@ RUN apk del --no-network .v8-build; \
 
 
 FROM postgres:14.4-alpine
-ENV PLV8_VERSION=3.1.1
+ENV PLV8_VERSION=3.1.3
 COPY --from=plv8_build /usr/local/share/postgresql/extension/ /usr/local/share/postgresql/extension/
 COPY --from=plv8_build /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
