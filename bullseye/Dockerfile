@@ -1,4 +1,4 @@
-FROM postgres:14.4 AS plv8_build
+FROM postgres:14.5 AS plv8_build
 
 ENV PLV8_VERSION=3.0.0
 ENV PG_MAJOR=14
@@ -39,7 +39,7 @@ RUN rm -rf /root/.vpython_cipd_cache /root/.vpython-root \
   && apt-get autoremove -y \
   && rm -rf /tmp/build /var/lib/apt/lists/*
 
-FROM postgres:14.4
+FROM postgres:14.5
 RUN mkdir -p /usr/lib/postgresql/${PG_MAJOR}/lib/
 ENV PLV8_VERSION=3.0.0
 RUN runtimeDependencies="libc++1" \

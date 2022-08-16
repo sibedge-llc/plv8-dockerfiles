@@ -1,8 +1,12 @@
-FROM postgres:14.2 AS plv8_build
+FROM postgres:14.5 AS plv8_build
 
 ARG PLV8_VERSION=3.0.0
 ARG PG_MAJOR=14
 ARG V8_VERSION=8.6.405
+
+ARG BIGINT_GRACEFUL_VALUE='BIGINT_GRACEFUL=1'
+ARG BIGINT_GRACEFUL
+ARG BIGINT_GRACEFUL_FLAG=${BIGINT_GRACEFUL:+$BIGINT_GRACEFUL_VALUE}
 
 RUN buildDependencies="build-essential \
     ca-certificates \
@@ -70,7 +74,7 @@ RUN curl -o /tmp/build/v$PLV8_VERSION.tar.gz -SL "https://github.com/plv8/plv8/a
   && cd /tmp/build \
   && tar -xzf /tmp/build/v$PLV8_VERSION.tar.gz -C /tmp/build/ \
   && cd /tmp/build/plv8-$PLV8_VERSION \
-  && make -f Makefile.debian static \
+  && make -f Makefile.debian ${BIGINT_GRACEFUL_FLAG} static \
   && make -f Makefile.debian install \
   && strip /usr/lib/postgresql/${PG_MAJOR}/lib/plv8-${PLV8_VERSION}.so
 RUN rm -rf /root/.vpython_cipd_cache /root/.vpython-root \
@@ -80,7 +84,7 @@ RUN rm -rf /root/.vpython_cipd_cache /root/.vpython-root \
   && rm -rf /tmp/build /var/lib/apt/lists/*
 
 
-FROM postgres:14.2
+FROM postgres:14.5
 
 ARG PG_MAJOR=14
 ARG PLV8_VERSION=3.0.0
