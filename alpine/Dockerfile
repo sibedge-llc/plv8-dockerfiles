@@ -1,4 +1,4 @@
-FROM postgres:14.5-alpine AS plv8_build
+FROM postgres:14.6-alpine AS plv8_build
 
 ARG V8_VERSION=9.9.115.10
 ARG PLV8_VERSION=3.1.4
@@ -336,6 +336,7 @@ RUN curl -o /tmp/build/v$PLV8_VERSION.tar.gz -SL "https://github.com/plv8/plv8/a
 COPY Makefile.alpine /tmp/build/plv8-$PLV8_VERSION/
 
 RUN cd /tmp/build/plv8-$PLV8_VERSION \
+  && ln -sf /usr/lib/llvm13/bin/llvm-ar /usr/bin/llvm-ar \
   && make -f Makefile.alpine ${BIGINT_GRACEFUL_FLAG} static \
   && make -f Makefile.alpine install \
   && strip /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
@@ -344,7 +345,7 @@ RUN apk del --no-network .v8-build; \
   rm -rf /tmp/* /var/tmp/*
 
 
-FROM postgres:14.5-alpine
+FROM postgres:14.6-alpine
 ENV PLV8_VERSION=3.1.4
 COPY --from=plv8_build /usr/local/share/postgresql/extension/ /usr/local/share/postgresql/extension/
 COPY --from=plv8_build /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
