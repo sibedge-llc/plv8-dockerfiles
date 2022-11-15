@@ -336,6 +336,7 @@ RUN curl -o /tmp/build/v$PLV8_VERSION.tar.gz -SL "https://github.com/plv8/plv8/a
 COPY Makefile.alpine /tmp/build/plv8-$PLV8_VERSION/
 
 RUN cd /tmp/build/plv8-$PLV8_VERSION \
+  && ln -sf /usr/lib/llvm13/bin/llvm-ar /usr/bin/llvm-ar \
   && make -f Makefile.alpine ${BIGINT_GRACEFUL_FLAG} static \
   && make -f Makefile.alpine install \
   && strip /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
