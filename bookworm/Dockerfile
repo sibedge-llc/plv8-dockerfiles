@@ -57,7 +57,7 @@ RUN rm -rf /root/.vpython_cipd_cache /root/.vpython-root \
   && apt-get autoremove -y \
   && rm -rf /tmp/build /var/lib/apt/lists/*
 
-FROM sibedge/postgres:15.0-bookworm
+FROM sibedge/postgres:15.1-bookworm
 RUN mkdir -p /usr/lib/postgresql/${PG_MAJOR}/lib/
 ENV PLV8_VERSION=3.1.4
 COPY --from=plv8_build /usr/share/postgresql/${PG_MAJOR}/extension/ /usr/share/postgresql/${PG_MAJOR}/extension/
