@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim AS plv8_build
 
-ENV PLV8_VERSION=3.1.4
+ENV PLV8_VERSION=3.1.5
 ENV PG_MAJOR=15
 
 ARG BIGINT_GRACEFUL_VALUE='BIGINT_GRACEFUL=1'
@@ -57,8 +57,8 @@ RUN rm -rf /root/.vpython_cipd_cache /root/.vpython-root \
   && apt-get autoremove -y \
   && rm -rf /tmp/build /var/lib/apt/lists/*
 
-FROM sibedge/postgres:15.1-bookworm
+FROM sibedge/postgres:15.2-bookworm
 RUN mkdir -p /usr/lib/postgresql/${PG_MAJOR}/lib/
-ENV PLV8_VERSION=3.1.4
+ENV PLV8_VERSION=3.1.5
 COPY --from=plv8_build /usr/share/postgresql/${PG_MAJOR}/extension/ /usr/share/postgresql/${PG_MAJOR}/extension/
 COPY --from=plv8_build /usr/lib/postgresql/${PG_MAJOR}/lib/plv8-${PLV8_VERSION}.so /usr/lib/postgresql/${PG_MAJOR}/lib/plv8-${PLV8_VERSION}.so
