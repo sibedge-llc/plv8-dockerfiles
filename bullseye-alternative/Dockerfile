@@ -1,4 +1,4 @@
-FROM postgres:14.7 AS plv8_build
+FROM postgres:14.8 AS plv8_build
 
 ARG PLV8_VERSION=3.0.0
 ARG PG_MAJOR=14
@@ -84,7 +84,7 @@ RUN rm -rf /root/.vpython_cipd_cache /root/.vpython-root \
   && rm -rf /tmp/build /var/lib/apt/lists/*
 
 
-FROM postgres:14.7
+FROM postgres:14.8
 
 ARG PG_MAJOR=14
 ARG PLV8_VERSION=3.0.0
