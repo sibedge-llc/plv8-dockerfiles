@@ -25,6 +25,7 @@ RUN buildDependencies="build-essential \
     libc++-dev \
     libncurses5 \
     libc++abi-dev \
+	ninja-build \
     postgresql-server-dev-$PG_MAJOR" \
     runtimeDependencies="libc++1" \
     &&  apt-get update && apt-get install -y --no-install-recommends ${buildDependencies} ${runtimeDependencies}
