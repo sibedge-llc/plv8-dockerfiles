@@ -11,35 +11,18 @@ RUN apk update \
     && apk add --no-cache --virtual .v8-build \
   libstdc++-dev \
   binutils \
-  libgomp \
-  libatomic \
-  gmp \
-  isl25 \
-  mpfr4 \
-  mpc1 \
   gcc \
-  musl-dev \
   libc-dev \
   g++ \
   ca-certificates \
-  brotli-libs \
-  nghttp2-libs \
-  libcurl \
   curl \
   make \
   libbz2 \
-  perl \
   linux-headers \
-  libexpat \
-  mpdecimal \
-  sqlite-libs \
+  cmake \
   clang15-libs \
   clang15 \
   llvm15 \
-  lld-libs \
-  lld \
-  cmake \
-  ncurses \
   ncurses-libs \
   zlib-dev \
   git \
