@@ -1,4 +1,4 @@
-FROM postgres:14.8-alpine3.17 AS plv8_build
+FROM postgres:14.9-alpine3.17 AS plv8_build
 
 ARG V8_VERSION=9.9.115.10
 ARG PLV8_VERSION=3.1.7
@@ -346,7 +346,7 @@ RUN apk del --no-network .v8-build; \
   rm -rf /tmp/* /var/tmp/*
 
 
-FROM postgres:14.8-alpine3.17
+FROM postgres:14.9-alpine3.17
 ENV PLV8_VERSION=3.1.7
 COPY --from=plv8_build /usr/local/share/postgresql/extension/ /usr/local/share/postgresql/extension/
 COPY --from=plv8_build /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
