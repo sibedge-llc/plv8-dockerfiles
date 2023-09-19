@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim AS plv8_build
 
 ENV PLV8_VERSION=3.2.0
-ENV PG_MAJOR=15
+ENV PG_MAJOR=16
 
 ARG BIGINT_GRACEFUL_VALUE='BIGINT_GRACEFUL=1'
 ARG BIGINT_GRACEFUL
@@ -27,7 +27,7 @@ RUN buildDependencies="build-essential \
     runtimeDependencies="libc++1" \
     && apt-get update && apt-get install -y --no-install-recommends ${buildDependencies} ${runtimeDependencies}
 	
-RUN sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main 15" > /etc/apt/sources.list.d/pgdg.list' \
+RUN sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main ${PG_MAJOR}" > /etc/apt/sources.list.d/pgdg.list' \
     && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
 
 RUN apt-get update && apt-get install -y postgresql-$PG_MAJOR postgresql-server-dev-$PG_MAJOR
@@ -51,7 +51,7 @@ RUN rm -rf /root/.vpython_cipd_cache /root/.vpython-root \
   && apt-get autoremove -y \
   && rm -rf /tmp/build /var/lib/apt/lists/*
 
-FROM postgres:15.4-bookworm
+FROM postgres:16.0-bookworm
 RUN mkdir -p /usr/lib/postgresql/${PG_MAJOR}/lib/
 ENV PLV8_VERSION=3.2.0
 COPY --from=plv8_build /usr/share/postgresql/${PG_MAJOR}/extension/ /usr/share/postgresql/${PG_MAJOR}/extension/
