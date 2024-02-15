@@ -1,6 +1,6 @@
-FROM postgres:15.5-alpine AS plv8_build
+FROM postgres:15.6-alpine AS plv8_build
 
-ENV PLV8_VERSION=3.2.0
+ENV PLV8_VERSION=3.2.2
 ENV PG_MAJOR=15
 
 ARG BIGINT_GRACEFUL_VALUE='BIGINT_GRACEFUL=1'
@@ -46,7 +46,7 @@ RUN apk del --no-network .v8-build; \
   rm -rf /tmp/* /var/tmp/*
 
 
-FROM postgres:15.5-alpine
-ENV PLV8_VERSION=3.2.0
+FROM postgres:15.6-alpine
+ENV PLV8_VERSION=3.2.2
 COPY --from=plv8_build /usr/local/share/postgresql/extension/ /usr/local/share/postgresql/extension/
 COPY --from=plv8_build /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
