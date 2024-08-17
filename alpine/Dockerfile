@@ -1,4 +1,4 @@
-FROM postgres:15.7-alpine AS plv8_build
+FROM postgres:15.8-alpine AS plv8_build
 
 ENV PLV8_VERSION=3.2.2
 ENV PG_MAJOR=15
@@ -34,7 +34,9 @@ RUN mkdir -p /tmp/build \
   && tar -xzf /tmp/build/v$PLV8_VERSION.tar.gz -C /tmp/build/
   
 RUN cd /tmp/build/plv8-$PLV8_VERSION/deps \
-  && git clone https://github.com/bnoordhuis/v8-cmake.git
+  && git clone https://github.com/bnoordhuis/v8-cmake.git \
+  && cd ./v8-cmake \
+  && git checkout beb327f02f4a7e200b9ec
   
 RUN cd /tmp/build/plv8-$PLV8_VERSION \
   && git init \
@@ -46,7 +48,7 @@ RUN apk del --no-network .v8-build; \
   rm -rf /tmp/* /var/tmp/*
 
 
-FROM postgres:15.7-alpine
+FROM postgres:15.8-alpine
 ENV PLV8_VERSION=3.2.2
 COPY --from=plv8_build /usr/local/share/postgresql/extension/ /usr/local/share/postgresql/extension/
 COPY --from=plv8_build /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
