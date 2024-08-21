@@ -364,8 +364,10 @@ postgresql_set_property() {
 #########################
 postgresql_create_replication_user() {
     local -r escaped_password="${POSTGRESQL_REPLICATION_PASSWORD//\'/\'\'}"
+    local -r postgres_password="${POSTGRESQL_POSTGRES_PASSWORD:-$POSTGRESQL_PASSWORD}"
+
     info "Creating replication user $POSTGRESQL_REPLICATION_USER"
-    echo "CREATE ROLE \"$POSTGRESQL_REPLICATION_USER\" REPLICATION LOGIN ENCRYPTED PASSWORD '$escaped_password'" | postgresql_execute
+    echo "CREATE ROLE \"$POSTGRESQL_REPLICATION_USER\" REPLICATION LOGIN ENCRYPTED PASSWORD '$escaped_password'" | postgresql_execute "" "postgres" "$postgres_password"
 }
 
 ########################
@@ -496,17 +498,18 @@ postgresql_alter_postgres_user() {
 #########################
 postgresql_create_admin_user() {
     local -r escaped_password="${POSTGRESQL_PASSWORD//\'/\'\'}"
+    local -r postgres_password="${POSTGRESQL_POSTGRES_PASSWORD:-$POSTGRESQL_PASSWORD}"
     info "Creating user ${POSTGRESQL_USERNAME}"
     local connlimit_string=""
     if [[ -n "$POSTGRESQL_USERNAME_CONNECTION_LIMIT" ]]; then
         connlimit_string="CONNECTION LIMIT ${POSTGRESQL_USERNAME_CONNECTION_LIMIT}"
     fi
-    echo "CREATE ROLE \"${POSTGRESQL_USERNAME}\" WITH LOGIN ${connlimit_string} CREATEDB PASSWORD '${escaped_password}';" | postgresql_execute
+    echo "CREATE ROLE \"${POSTGRESQL_USERNAME}\" WITH LOGIN ${connlimit_string} CREATEDB PASSWORD '${escaped_password}';" | postgresql_execute "" "postgres" "$postgres_password"
     info "Granting access to \"${POSTGRESQL_USERNAME}\" to the database \"${POSTGRESQL_DATABASE}\""
-    echo "GRANT ALL PRIVILEGES ON DATABASE \"${POSTGRESQL_DATABASE}\" TO \"${POSTGRESQL_USERNAME}\"\;" | postgresql_execute "" "postgres" "$POSTGRESQL_PASSWORD"
-    echo "ALTER DATABASE \"${POSTGRESQL_DATABASE}\" OWNER TO \"${POSTGRESQL_USERNAME}\"\;" | postgresql_execute "" "postgres" "$POSTGRESQL_PASSWORD"
+    echo "GRANT ALL PRIVILEGES ON DATABASE \"${POSTGRESQL_DATABASE}\" TO \"${POSTGRESQL_USERNAME}\"\;" | postgresql_execute "" "postgres" "$postgres_password"
+    echo "ALTER DATABASE \"${POSTGRESQL_DATABASE}\" OWNER TO \"${POSTGRESQL_USERNAME}\"\;" | postgresql_execute "" "postgres" "$postgres_password"
     info "Setting ownership for the 'public' schema database \"${POSTGRESQL_DATABASE}\" to \"${POSTGRESQL_USERNAME}\""
-    echo "ALTER SCHEMA public OWNER TO \"${POSTGRESQL_USERNAME}\"\;" | postgresql_execute "$POSTGRESQL_DATABASE" "postgres" "$POSTGRESQL_PASSWORD"
+    echo "ALTER SCHEMA public OWNER TO \"${POSTGRESQL_USERNAME}\"\;" | postgresql_execute "$POSTGRESQL_DATABASE" "postgres" "$postgres_password"
 }
 
 ########################
@@ -774,7 +777,7 @@ postgresql_stop() {
 #########################
 postgresql_start_bg() {
     local -r pg_logs=${1:-false}
-    local -r pg_ctl_flags=("-w" "-D" "$POSTGRESQL_DATA_DIR" "-l" "$POSTGRESQL_LOG_FILE" "-o" "--config-file=$POSTGRESQL_CONF_FILE --external_pid_file=$POSTGRESQL_PID_FILE --hba_file=$POSTGRESQL_PGHBA_FILE")
+    local -r pg_ctl_flags=("-W" "-D" "$POSTGRESQL_DATA_DIR" "-l" "$POSTGRESQL_LOG_FILE" "-o" "--config-file=$POSTGRESQL_CONF_FILE --external_pid_file=$POSTGRESQL_PID_FILE --hba_file=$POSTGRESQL_PGHBA_FILE")
     info "Starting PostgreSQL in background..."
     if is_postgresql_running; then
         return 0
@@ -789,7 +792,7 @@ postgresql_start_bg() {
     else
         "${pg_ctl_cmd[@]}" "start" "${pg_ctl_flags[@]}" >/dev/null 2>&1
     fi
-    local pg_isready_args=("-U" "postgres" "-p" "$POSTGRESQL_PORT_NUMBER")
+    local pg_isready_args=("-U" "postgres" "-p" "$POSTGRESQL_PORT_NUMBER" "-h" "127.0.0.1")
     local counter=$POSTGRESQL_INIT_MAX_TIMEOUT
     while ! "$POSTGRESQL_BIN_DIR"/pg_isready "${pg_isready_args[@]}" >/dev/null 2>&1; do
         sleep 1
@@ -1075,7 +1078,7 @@ postgresql_execute_print_output() {
     local opts
     read -r -a opts <<<"${@:4}"
 
-    local args=("-U" "$user" "-p" "${POSTGRESQL_PORT_NUMBER:-5432}")
+    local args=("-U" "$user" "-p" "${POSTGRESQL_PORT_NUMBER:-5432}" "-h" "127.0.0.1")
     [[ -n "$db" ]] && args+=("-d" "$db")
     [[ "${#opts[@]}" -gt 0 ]] && args+=("${opts[@]}")
 
