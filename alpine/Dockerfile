@@ -34,9 +34,7 @@ RUN mkdir -p /tmp/build \
   && tar -xzf /tmp/build/v$PLV8_VERSION.tar.gz -C /tmp/build/
   
 RUN cd /tmp/build/plv8-$PLV8_VERSION/deps \
-  && git clone https://github.com/bnoordhuis/v8-cmake.git \
-  && cd ./v8-cmake \
-  && git checkout beb327f02f4a7e200b9ec
+  && git clone https://github.com/bnoordhuis/v8-cmake.git
   
 RUN cd /tmp/build/plv8-$PLV8_VERSION \
   && git init \
