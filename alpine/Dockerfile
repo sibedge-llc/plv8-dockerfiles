@@ -14,6 +14,7 @@ RUN apk update \
   gcc \
   libc-dev \
   g++ \
+  patch \  
   ca-certificates \
   curl \
   make \
@@ -34,14 +35,14 @@ RUN mkdir -p /tmp/build \
   && tar -xzf /tmp/build/v$PLV8_VERSION.tar.gz -C /tmp/build/
   
 RUN cd /tmp/build/plv8-$PLV8_VERSION/deps \
-  && git clone https://github.com/bnoordhuis/v8-cmake.git \
-  && cd ./v8-cmake \
-  && git checkout beb327f02f4a7e200b9ec
+  && git clone https://github.com/bnoordhuis/v8-cmake.git
+  
+COPY Makefile.c20 /tmp/build/plv8-$PLV8_VERSION/
   
 RUN cd /tmp/build/plv8-$PLV8_VERSION \
   && git init \
-  && make ${BIGINT_GRACEFUL_FLAG} \
-  && make install \
+  && make -f Makefile.c20 ${BIGINT_GRACEFUL_FLAG} \
+  && make -f Makefile.c20 install \
   && strip /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
 
 RUN apk del --no-network .v8-build; \
