@@ -1,4 +1,4 @@
-FROM postgres:17.1-alpine AS plv8_build
+FROM postgres:17.3-alpine AS plv8_build
 
 ENV PLV8_VERSION=3.2.3
 ENV PG_MAJOR=17
@@ -21,9 +21,9 @@ RUN apk update \
   libbz2 \
   linux-headers \
   cmake \
-  clang15-libs \
-  clang15 \
-  llvm15 \
+  clang19-libs \
+  clang19 \
+  llvm19 \
   ncurses-libs \
   zlib-dev \
   git \
@@ -49,7 +49,7 @@ RUN apk del --no-network .v8-build; \
   rm -rf /tmp/* /var/tmp/*
 
 
-FROM postgres:17.1-alpine
+FROM postgres:17.3-alpine
 ENV PLV8_VERSION=3.2.3
 COPY --from=plv8_build /usr/local/share/postgresql/extension/ /usr/local/share/postgresql/extension/
 COPY --from=plv8_build /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
