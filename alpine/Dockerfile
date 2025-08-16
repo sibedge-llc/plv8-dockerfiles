@@ -1,6 +1,7 @@
-FROM postgres:17.5-alpine AS plv8_build
+FROM postgres:17.6-alpine AS plv8_build
 
-ENV PLV8_VERSION=3.2.3
+ENV PLV8_BRANCH=r3.2
+ENV PLV8_VERSION=3.2.4
 ENV PG_MAJOR=17
 
 ARG BIGINT_GRACEFUL_VALUE='BIGINT_GRACEFUL=1'
@@ -30,26 +31,22 @@ RUN apk update \
   python3
 
 RUN mkdir -p /tmp/build \
-  && curl -o /tmp/build/v$PLV8_VERSION.tar.gz -SL "https://github.com/plv8/plv8/archive/refs/tags/v${PLV8_VERSION}.tar.gz" \
   && cd /tmp/build \
-  && tar -xzf /tmp/build/v$PLV8_VERSION.tar.gz -C /tmp/build/
-  
-RUN cd /tmp/build/plv8-$PLV8_VERSION/deps \
-  && git clone https://github.com/bnoordhuis/v8-cmake.git
-  
-COPY Makefile.c20 /tmp/build/plv8-$PLV8_VERSION/
-  
-RUN cd /tmp/build/plv8-$PLV8_VERSION \
-  && git init \
-  && make -f Makefile.c20 ${BIGINT_GRACEFUL_FLAG} \
-  && make -f Makefile.c20 install \
-  && strip /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
+  && git clone --branch ${PLV8_BRANCH} --single-branch --depth 1 https://github.com/plv8/plv8 \
+  && cd plv8 \
+  && git submodule update --init \
+  && cd deps/v8-cmake \
+  && git checkout master \
+  && cd ../.. \
+  && make ${BIGINT_GRACEFUL_FLAG} \
+  && strip plv8-${PLV8_VERSION}.so \
+  && make install
 
 RUN apk del --no-network .v8-build; \
   rm -rf /tmp/* /var/tmp/*
 
 
-FROM postgres:17.5-alpine
-ENV PLV8_VERSION=3.2.3
+FROM postgres:17.6-alpine
+ENV PLV8_VERSION=3.2.4
 COPY --from=plv8_build /usr/local/share/postgresql/extension/ /usr/local/share/postgresql/extension/
 COPY --from=plv8_build /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so /usr/local/lib/postgresql/plv8-${PLV8_VERSION}.so
